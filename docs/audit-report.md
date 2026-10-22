@@ -1,189 +1,250 @@
-# Cynbit Backend Technical Audit
+# Cynbit Backend Technical Audit Report
 
 **Assessment:** Backend Developer Intern  
 **Review date:** 22 October 2026  
-**Scope:** Publicly observable website behaviour and a locally implemented reference API  
-**Status:** Initial audit — live backend findings require evidence verification
+**Scope:** Publicly accessible Cynbit pages and a separate local reference API  
+**Assessment status:** Public-surface review; production API behaviour remains unverified unless a finding is supported by a recorded browser observation.
 
-## 1. Executive Summary
+## 1. Executive summary
 
-This assessment reviews publicly observable aspects of Cynbit's website and proposes backend engineering improvements for inquiry and product-demo workflows.
+Cynbit's public website exposes several workflows relevant to backend engineering: general contact/inquiry, product-demo requests, and careers/application information. The product page publicly describes Cynbit Studio, TenantEase, and Revio, and includes a demo-request workflow. The contact page includes information for contacting the company. The careers page describes an engineering culture emphasizing documentation, peer reviews, and iterative sprints.
 
-The review focuses on server-side input validation, API response contracts, request throttling, data minimization, error handling, and testability. A local Django REST Framework implementation demonstrates how these controls can be implemented and verified independently.
+These public pages suggest useful audit questions around input validation, privacy, request handling, response contracts, and abuse prevention. They do **not** prove that the production backend has a vulnerability or even establish which API, database, or service handles each form.
 
-The local implementation currently has two endpoints:
-
+A local Django REST Framework reference implementation demonstrates two proposed endpoints:
 - `POST /api/v1/inquiries/`
 - `POST /api/v1/demo-requests/`
 
-Ten automated tests pass across the two endpoints. These tests validate the local reference implementation; they do not establish the behaviour or security posture of Cynbit's production backend.
+The developer reported 10 local automated tests passing. These tests validate the reference implementation only; they are not evidence of the production site's security.
 
-## 2. Scope and Methodology
+## 2. Scope and methodology
 
 ### In scope
-
-- Publicly accessible website pages and forms.
-- Normal browser interactions and observable HTTP requests.
-- Public response headers, status codes, payload structures, and request timings where captured.
-- Local implementation of validation, response serialization, throttling configuration, and automated tests.
+- Publicly accessible pages and visible form fields.
+- Normal browser use and low-volume observation of requests that occur naturally during page interaction.
+- Public response headers and request/response details if captured through browser DevTools.
+- Local reference implementation and its automated tests.
 
 ### Out of scope
+- Unauthorized access, account manipulation, or attempts to access another person's data.
+- Aggressive endpoint enumeration, fuzzing against production, load testing, exploitation, or disruption.
+- Access to private source code, databases, production logs, or internal infrastructure.
 
-- Unauthorized access or account manipulation.
-- Hidden endpoint enumeration, destructive tests, load testing, or exploitation.
-- Access to private databases, production logs, or internal source code.
-- Claims about production vulnerabilities without supporting evidence.
+### Evidence rules
+- **Observed:** Directly visible in a cited public page or recorded in a dated browser observation.
+- **Hypothesis / potential risk:** A plausible concern that has not been confirmed in the target system.
+- **Not assessed:** Cannot be established from the available public surface or current evidence.
+- Never label a weakness as “confirmed” without reproducible evidence.
 
-### Evidence classification
+## 3. Public application surface
 
-- **Verified observation:** Directly observed and recorded.
-- **Potential risk:** A credible risk that requires additional evidence.
-- **Not assessed:** The available public access did not establish the behaviour.
+### 3.1 Contact page
+URL: https://www.cynbit.in/contact
 
-## 3. Public Application Surface
+The publicly indexed page includes contact information and a “Common Inquiries” section describing how prospective customers can start a project and ask about custom AI automation. The live page should be inspected in a browser to verify the exact form fields and the current submission flow before describing those details as observed.
 
-The official website presents an inquiry workflow at:
+### 3.2 Product suite and demo workflow
+URL: https://www.cynbit.in/products
 
-https://www.cynbit.in/contact
+The page describes three products:
+- **Cynbit Studio:** learning, coding missions, AI feedback, and career preparation.
+- **TenantEase:** property and tenant management, rent/payment tracking, and tenant profiles.
+- **Revio:** review management, sentiment analysis, and role-based access concepts.
 
-The careers website lists technical internship roles, including Backend Developer Intern:
+The page includes a “Schedule a Demo” workflow with product selection and fields including full name, work email, company name, and a message. This is a public-page observation; the backend endpoint, storage, validation, and notification path are not established by the page alone.
 
-https://cynbitwebsite.vercel.app/careers
+### 3.3 Careers page
+URL: https://www.cynbit.in/careers
 
-These pages provide useful starting points for examining form workflows and data handling. Their public availability does not establish which backend services, databases, or API gateways process submissions.
+The publicly indexed careers page describes a documentation-led culture, asynchronous communication, collaborative reviews, and iterative sprints. The page is useful context for presenting the report with a clear methodology, evidence trail, and prioritized remediation plan. Do not infer a private hiring rubric from marketing content.
 
-## 4. Findings and Investigation Plan
+## 4. Findings and investigation register
 
-### F-01: Server-side form validation
+### F-01 — Server-side validation of public submissions
+**Category:** Input validation  
+**Status:** Not verified on production; local control demonstrated  
+**Severity:** Undetermined until evidence and impact are established
 
-**Category:** Data validation  
-**Status:** Verify live behaviour  
-**Potential impact:** Invalid or oversized input could increase downstream processing errors or create inconsistent records if server-side controls are insufficient.
+**Why investigate:** Public forms commonly accept user-controlled values. Client-side validation can improve usability but cannot replace server-side validation.
 
-**Investigation:** Observe normal form submissions and document validation messages and HTTP responses. Do not infer backend validation from frontend messages alone.
+**Evidence currently available:** Public contact/product pages show user-facing workflows. No captured production request/response pair in this evidence pack establishes how server-side validation behaves.
 
-**Recommendation:** Use explicit serializer validation, required-field constraints, length limits, and consistent field-level errors.
+**Potential impact if absent:** Invalid or oversized data could be persisted or passed to downstream services, creating inconsistent records or processing errors.
 
-**Local verification:** Automated tests cover invalid email, blank required fields, and successful submissions.
+**Recommendation:** Enforce required fields, type and length constraints, email syntax validation, allowed product values, normalization where appropriate, and consistent field-level `400 Bad Request` responses. Set a request-body size limit at the application or edge layer.
 
-### F-02: Public endpoint abuse controls
+**Verification plan:** In the browser, submit only ordinary test values through the intended form. Record the request method, destination, content type, status, and response. Do not send repeated, oversized, or deliberately malicious requests to production. If the form prevents submission client-side, state that backend validation remains unverified.
 
-**Category:** Security and availability  
-**Status:** Proposed control; production configuration not verified  
-**Potential impact:** Automated submissions could consume application resources or create unwanted records.
+**Local implementation:** DRF serializers validate the inquiry and demo-request payloads. The local test suite checks invalid email and required fields.
 
-**Recommendation:** Apply endpoint-specific rate limits, request-size limits, monitoring, and additional bot protection where justified.
+### F-02 — Data minimization and response-field control
+**Category:** Privacy / API design  
+**Status:** Local control demonstrated; production response not verified  
+**Severity:** Undetermined
 
-**Local implementation:** Scoped throttling is configured for inquiry and demo-request endpoints. The configured rate is illustrative and requires production tuning. Application-level throttling is not a complete denial-of-service defence.
+**Why investigate:** Inquiry, demo, and candidate workflows can handle personal information. API responses should return only fields needed by the client.
 
-### F-03: API response data minimization
+**Evidence currently available:** Public product/contact/careers pages establish that user-facing business workflows exist; they do not establish the shape of stored records or response payloads.
 
-**Category:** Privacy and API design  
-**Status:** Local implementation verified; production behaviour not verified  
-**Potential impact:** Returning unnecessary fields can disclose internal or personal information.
+**Potential impact if absent:** Unnecessary personal or internal fields in responses or logs can increase exposure if those responses/logs are later accessed by an unauthorized party.
 
-**Recommendation:** Use explicit serializer field allowlists and avoid returning internal notes, secrets, administrative fields, or unrelated records.
+**Recommendation:** Use explicit response serializers/allowlists, avoid returning internal notes or administrative fields, redact personal information from logs, and define retention and deletion rules.
 
-**Local verification:** Automated tests assert the exact set of response fields.
+**Verification plan:** Capture the response to a normal submission if the browser exposes it. Review only fields actually returned. Do not infer database columns from form fields.
 
-### F-04: Error handling and API consistency
+**Local implementation:** Automated tests assert exact response keys for the reference endpoints.
 
-**Category:** Reliability  
-**Status:** Partially verified locally  
-**Potential impact:** Inconsistent status codes or unstructured errors can complicate client integration and incident diagnosis.
+### F-03 — Public form abuse and resource consumption
+**Category:** Availability / abuse prevention  
+**Status:** Production controls not verified; local scoped throttling configured  
+**Severity:** Undetermined
 
-**Recommendation:** Use predictable success and validation responses, avoid stack traces in client-facing errors, and log unexpected failures with correlation IDs while redacting personal information.
+**Why investigate:** Public submission flows can attract automated or duplicate submissions.
 
-**Next verification:** Add tests for malformed JSON, oversized payloads, server-side failures, and throttled responses.
+**Evidence currently available:** Public inquiry/demo workflows exist. There is no evidence in this pack that production rate limiting is absent or incorrectly configured.
 
-### F-05: Personal-data handling
+**Potential impact if controls are insufficient:** Spam records, notification abuse, and increased processing cost.
 
-**Category:** Privacy and data governance  
-**Status:** Further verification required  
-**Potential impact:** Excessive collection, unnecessary retention, or inappropriate logging can expose personal information.
+**Recommendation:** Use appropriately tuned edge/WAF limits, application-level throttling, request-size limits, bot detection where justified, monitoring, and a reviewable process for false positives. Apply idempotency where duplicate business actions would be harmful.
 
-**Recommendation:** Minimize collected fields, define retention periods, restrict access to submitted records, and redact personal information from logs.
+**Verification plan:** Review publicly returned headers and normal form behaviour only. Do not attempt to trigger production throttling by repeated submissions. Ask the system owner for configuration evidence if deeper confirmation is required.
 
-**Next verification:** Review the published privacy notice and record the actual data flow and any publicly identifiable third-party processing services.
+**Local implementation:** The reference API uses DRF `ScopedRateThrottle`. DRF documents that built-in throttling is intended for basic usage policies and is not a complete security or denial-of-service defence.
 
-## 5. Reference Architecture
+### F-04 — Error handling and observability
+**Category:** Reliability / information disclosure  
+**Status:** Production error behaviour not verified  
+**Severity:** Undetermined
+
+**Why investigate:** API clients need predictable status codes and actionable validation errors, while internal exceptions must not leak stack traces or secrets.
+
+**Evidence currently available:** No production error response or malformed-request response has been recorded in this evidence pack.
+
+**Recommendation:** Return stable error schemas; use `400` for validation errors, `415` for unsupported media types where applicable, and `429` for throttling. Do not expose stack traces to clients. Use structured server-side logs with request/correlation IDs and redaction of personal data.
+
+**Verification plan:** Record errors naturally encountered during normal use. Do not deliberately provoke server exceptions on production.
+
+**Local implementation:** The local tests validate field-level `400` responses. Additional tests for malformed JSON, throttling, and unexpected failures are recommended.
+
+### F-05 — Authentication and authorization boundaries
+**Category:** Access control  
+**Status:** Not assessed from the available public workflow  
+**Severity:** Not assigned
+
+**Why investigate:** Public form creation may intentionally be anonymous, while access to submitted records, admin functions, or tenant/business data should be restricted.
+
+**Evidence currently available:** Public marketing content describes product concepts, including role-based access for Revio and tenant profiles for TenantEase. These descriptions do not prove how authorization is implemented.
+
+**Recommendation:** Keep public create endpoints separate from administrative list/detail endpoints. Require authentication and explicit authorization for private records. For multi-tenant applications, scope every data query to the user's authorized organization and test cross-tenant denial.
+
+**Verification plan:** Do not probe private records or attempt cross-account access. Request authorized test credentials and written scope if authenticated access-control testing is expected.
+
+### F-06 — Performance and caching
+**Category:** Performance  
+**Status:** Not measured  
+**Severity:** Not assigned
+
+**Why investigate:** Public pages can be reviewed for transfer size, cache headers, duplicate requests, and obvious request waterfalls, but a single browser visit is not a load test.
+
+**Evidence currently available:** No timestamped request waterfall, response-size measurements, or repeatable performance baseline is included here.
+
+**Recommendation:** Measure representative page-load requests, set appropriate caching for static assets, avoid caching personalized responses publicly, and optimize database queries only after code/query evidence exists. Add pagination for any future list endpoints.
+
+**Verification plan:** Capture a single normal page load using DevTools with cache state recorded. Avoid claiming performance problems without measurements.
+
+## 5. Local reference implementation
+
+The local Django REST Framework project demonstrates two POST endpoints and explicit validation.
+
+| Endpoint | Method | Purpose |
+|---|---|---|
+| `/api/v1/inquiries/` | POST | Create an inquiry |
+| `/api/v1/demo-requests/` | POST | Create a product-demo request |
+
+### Local test status
+The developer reported the following output on 22 October 2026:
+- Django system check: no issues.
+- Automated tests: 10 passed.
+- Test database created and destroyed successfully.
+
+This is a reported local test result. Re-run `python manage.py check` and `python manage.py test inquiries demo_requests` immediately before final submission.
+
+## 6. Proposed architecture
 
 ```text
-Public web form
-      |
-      v
-HTTP request
-      |
-      v
-API endpoint
-      |
-      v
-Scoped throttling
-      |
-      v
+Public browser form
+       |
+       v
+HTTPS / edge controls
+       |
+       v
+Request size and rate controls
+       |
+       v
+Django URL routing
+       |
+       v
+Scoped throttle
+       |
+       v
 Serializer validation
-      |
-      v
-Database model
-      |
-      v
+       |
+       v
+Database transaction / persistence
+       |
+       +------> Optional async notification task
+       |
+       v
 Explicit response serializer
-      |
-      v
+       |
+       v
 HTTP response
 ```
 
-The diagram represents the proposed local implementation, not a confirmed diagram of Cynbit's production architecture.
+This is a proposed reference architecture, not a representation of Cynbit's internal deployment. If notification delivery is required, use an asynchronous worker and retry strategy, and ensure retries do not create duplicate business records.
 
-## 6. Local Implementation and Testing
+## 7. Prioritized remediation roadmap
 
-**Technology:** Python, Django, Django REST Framework, SQLite development database.
+### P0 — Before release / immediate validation
+1. Verify the live contact and demo submission request/response flow using normal interactions.
+2. Record exact evidence: URL, date/time, method, status, content type, and redacted payload/response.
+3. Confirm that production conclusions are not inferred from local code.
+4. Check public responses for accidental stack traces or sensitive values only when naturally observable.
 
-**Endpoints:**
+### P1 — Core API hardening
+1. Enforce server-side field and payload-size validation.
+2. Use explicit response serializers.
+3. Apply endpoint-specific rate limits and edge controls.
+4. Keep public submission endpoints separate from private data retrieval.
+5. Add structured, redacted logging and useful error responses.
 
-| Method | Endpoint | Purpose |
-|---|---|---|
-| POST | `/api/v1/inquiries/` | Validate and create an inquiry |
-| POST | `/api/v1/demo-requests/` | Validate and create a product-demo request |
+### P2 — Reliability and data governance
+1. Define data-retention and deletion periods.
+2. Add idempotency for workflows where duplicates cause business impact.
+3. Add safe asynchronous notification delivery if needed.
+4. Add tests for malformed requests, throttling, and unexpected failures.
+5. Monitor error rates, submission volume, latency, and delivery failures.
 
-**Test status:** 10 automated tests passed on 22 October 2026.
-
-The tests cover successful creation, email validation, required fields, accepted product values, and response-field allowlists.
-
-These results apply only to the local implementation. Production integration, deployment configuration, concurrency behaviour, and external email delivery are outside the current implementation scope.
-
-## 7. Prioritized Remediation Roadmap
-
-**Immediate**
-1. Verify server-side validation on the actual public submission workflows.
-2. Ensure responses do not expose unnecessary data.
-3. Confirm consistent HTTP status codes and error handling.
-4. Review public response headers and HTTPS behaviour.
-
-**Short term**
-1. Configure and monitor appropriate rate limits.
-2. Add structured logging with sensitive-field redaction.
-3. Add tests for throttling, malformed requests, and oversized inputs.
-4. Review access controls for any administrative data retrieval.
-
-**Longer term**
-1. Introduce asynchronous notification delivery if required.
-2. Add monitoring and alerting for failed submissions.
-3. Establish data-retention and deletion policies.
-4. Evaluate caching and database indexing using measured traffic and query behaviour.
+### P3 — Measured performance improvement
+1. Establish a repeatable baseline.
+2. Inspect caching and static asset delivery.
+3. Profile database queries with representative workloads.
+4. Add pagination and indexes only where justified by actual query patterns.
+5. Load-test only a locally controlled or explicitly authorized environment.
 
 ## 8. Limitations
 
-This is a scope-limited assessment based on public information and a locally implemented reference API. No access to Cynbit's private source code, production database, or internal observability systems was available.
+This report is a scope-limited public-surface review. The current evidence does not prove a production vulnerability, identify Cynbit's actual API implementation, or confirm its database, authentication, caching, rate-limiting, or logging configuration. The local reference API is separate from Cynbit's systems.
 
-Only findings supported by recorded evidence should be classified as verified issues. Recommendations are proposed engineering improvements and should not be interpreted as proof that the production system has the corresponding weaknesses.
+The final submitted version should append real, timestamped browser observations and screenshots where collected. If an item was not checked, leave it as “not verified” rather than fabricating evidence.
 
 ## 9. References
 
-- Cynbit official website: https://www.cynbit.in/
-- Contact page: https://www.cynbit.in/contact
-- Careers page: https://cynbitwebsite.vercel.app/careers
-- Django REST Framework testing: https://www.django-rest-framework.org/api-guide/testing/
-- Django REST Framework throttling: https://www.django-rest-framework.org/api-guide/throttling/
-- OWASP API Security: https://owasp.org/www-project-api-security/
-
+1. Cynbit official website: https://www.cynbit.in/
+2. Cynbit contact page: https://www.cynbit.in/contact
+3. Cynbit product suite: https://www.cynbit.in/products
+4. Cynbit careers: https://www.cynbit.in/careers
+5. Django REST Framework throttling: https://www.django-rest-framework.org/api-guide/throttling/
+6. Django REST Framework testing: https://www.django-rest-framework.org/api-guide/testing/
+7. Django REST Framework exceptions: https://www.django-rest-framework.org/api-guide/exceptions/
+8. OWASP API Security Top 10 (2023): https://api-security.owasp.org/editions/2023/en/0x11-t10/
